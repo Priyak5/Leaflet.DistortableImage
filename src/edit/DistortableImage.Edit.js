@@ -6,6 +6,7 @@ L.DistortableImage.Edit = L.Handler.extend({
 		outline: '1px solid red',
 		keymap: {
 			68: '_toggleRotateDistort', // d
+			69: '_toggleIsolate', // e
 			73: '_toggleIsolate', // i
 			76: '_toggleLock', // l
 			79: '_toggleOutline', // o
@@ -29,6 +30,9 @@ L.DistortableImage.Edit = L.Handler.extend({
 			map = overlay._map,
 			i;
 
+			/* bring the selected image into view */
+			overlay.bringToFront();
+
 		this._lockHandles = new L.LayerGroup();
 		for (i = 0; i < 4; i++) {
 			this._lockHandles.addLayer(new L.LockHandle(overlay, i, { draggable: false }));
@@ -44,9 +48,9 @@ L.DistortableImage.Edit = L.Handler.extend({
 			this._rotateHandles.addLayer(new L.RotateHandle(overlay, i));
 		}
 
-		this._handles = { 
-			'lock':		 this._lockHandles, 
-			'distort': this._distortHandles, 
+		this._handles = {
+			'lock':		 this._lockHandles,
+			'distort': this._distortHandles,
 			'rotate':	this._rotateHandles
 		};
 
@@ -135,9 +139,9 @@ L.DistortableImage.Edit = L.Handler.extend({
 		/* Hide toolbars while dragging; click will re-show it */
 		this.dragging.on('dragstart', this._hideToolbar, this);
 
-		/* 
+		/*
 		 * Adjust default behavior of L.Draggable.
-		 * By default, L.Draggable overwrites the CSS3 distort transform 
+		 * By default, L.Draggable overwrites the CSS3 distort transform
 		 * that we want when it calls L.DomUtil.setPosition.
 		 */
 		this.dragging._updatePosition = function() {
@@ -164,7 +168,7 @@ L.DistortableImage.Edit = L.Handler.extend({
 		if (handlerName !== undefined) {
 			this[handlerName].call(this);
 		}
-	},	
+	},
 
 	_toggleRotateDistort: function() {
 		var map = this._overlay._map;
@@ -208,8 +212,8 @@ L.DistortableImage.Edit = L.Handler.extend({
 
 		map.removeLayer(this._handles[this._mode]);
 		/* Switch mode. */
-		if (this._mode === 'lock') { 
-			this._mode = 'distort'; 
+		if (this._mode === 'lock') {
+			this._mode = 'distort';
 			this._enableDragging();
 		} else {
 			this._mode = 'lock';
@@ -239,11 +243,70 @@ L.DistortableImage.Edit = L.Handler.extend({
 		if (event.containerPoint) { point = event.containerPoint; }
 		else { point = target._leaflet_pos; }
 		var raised_point = map.containerPointToLatLng(new L.Point(point.x,point.y-20));
-		raised_point.lng = overlay.getCenter().lng; 
+		raised_point.lng = overlay.getCenter().lng;
 		this.toolbar = new L.DistortableImage.EditToolbar(raised_point).addTo(map, overlay);
 		overlay.fire('toolbar:created');
 
 		L.DomEvent.stopPropagation(event);
+	},
+
+
+	// Based on https://github.com/publiclab/mapknitter/blob/8d94132c81b3040ae0d0b4627e685ff75275b416/app/assets/javascripts/mapknitter/Map.js#L47-L82
+	_toggleExport: function (){
+		var map = this._overlay._map; 
+		var overlay = this._overlay;
+
+		// make a new image
+		var downloadable = new Image();
+		
+		downloadable.id = downloadable.id || "tempId12345";
+		$('body').append(downloadable);
+
+		downloadable.onload = function onLoadDownloadableImage() {
+        
+			var height = downloadable.height,
+				width = downloadable.width,
+				nw = map.latLngToLayerPoint(overlay._corners[0]),
+				ne = map.latLngToLayerPoint(overlay._corners[1]),
+				sw = map.latLngToLayerPoint(overlay._corners[2]),
+				se = map.latLngToLayerPoint(overlay._corners[3]);
+        
+			// I think this is to move the image to the upper left corner, 
+			// jywarren: i think we may need these or the image goes off the edge of the canvas
+                        // jywarren: but these seem to break the distortion math... 
+
+			// jywarren: i think it should be rejiggered so it 
+			// finds the most negative values of x and y and then
+			// adds those to all coordinates
+
+			//nw.x -= nw.x;
+			//ne.x -= nw.x;
+			//se.x -= nw.x;
+			//sw.x -= nw.x;
+        
+			//nw.y -= nw.y;
+			//ne.y -= nw.y;
+			//se.y -= nw.y;
+			//sw.y -= nw.y;
+
+			// run once warping is complete
+       			downloadable.onload = function() {
+				$(downloadable).remove();
+			};
+ 
+			if (window && window.hasOwnProperty('warpWebGl')) {
+				warpWebGl(
+					downloadable.id,
+					[0, 0, width, 0, width, height, 0, height],
+					[nw.x, nw.y, ne.x, ne.y, se.x, se.y, sw.x, sw.y],
+					true // trigger download
+				);
+			}
+
+		};
+
+		downloadable.src = overlay.options.fullResolutionSrc || overlay._image.src;
+
 	},
 
 	toggleIsolate: function() {
@@ -274,5 +337,5 @@ L.DistortableImageOverlay.addInitHook(function() {
 
 	this.on('remove', function () {
 		if (this.editing) { this.editing.disable(); }
-	});	
+	});
 });
